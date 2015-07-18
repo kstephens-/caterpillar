@@ -113,7 +113,7 @@ def rare_component(x, dist=None):
 
 def rare_spec(x, spec_distribution):
     try:
-        if spec_distribution[x] < 10:
+        if spec_distribution[x] < 100:
             return 'RareSpec'
     except (KeyError, ValueError):
         return np.nan
@@ -121,8 +121,36 @@ def rare_spec(x, spec_distribution):
         return x
 
 
+def rare_component_name(x, dist):
+    try:
+        if dist[x] < 25:
+            return 'RareComponentName'
+    except (KeyError, ValueError):
+        return np.nan
+    else:
+        return x
+
+
+comp_name_re = re.compile(r'^([^ -]+)')
+def comp_name_type(x):
+    try:
+        return comp_name_re.match(x).group(1)
+    except TypeError:
+        return np.nan
+
+
+def rare_name_type(x, dist):
+    try:
+        if dist[x] < 8:
+            return 'RareNameType'
+    except (KeyError, ValueError):
+        return np.nan
+    else:
+        return x
+
+
 do_test = False
-version = '2.0'
+version = '3.0'
 
 print('reading train data')
 data = pd.read_csv('competition_data/train_set.csv', parse_dates=[2,])
@@ -138,7 +166,11 @@ component_dist = pd.concat(bill_data[c]
 rare_comp_p = functools.partial(rare_component,
                                 dist=component_dist)
 trimmed_components = bill_data.filter(regex='component_id_').applymap(rare_comp_p)
-bill_data.loc[:, trimmed_components.columns] = trimmed_components
+trimmed_components = trimmed_components \
+    .rename(columns={'component_id_{}'.format(i): 'component_id_{}_trimmed'.format(i)
+                     for i in range(1, 9)})
+bill_data = pd.merge(bill_data, trimmed_components, left_index=True, right_index=True)
+#bill_data.loc[:, ['{}_trimmed'.format(t) for t in trimmed_components.columns]] = trimmed_components
 
 #add total number of components feature
 bill_data.loc[:, 'total_components'] = \
@@ -148,79 +180,77 @@ bill_data.loc[:, 'has_components'] = (bill_data['total_components'] > 0).astype(
 
 print('expanding component columns')
 # make binary component features
+# bill_components = pd.concat(
+#     bill_data[['tube_assembly_id', c]].rename(columns={c: 'component'})
+#     for c in bill_data.filter(regex='component_')
+# )
+
 bill_components = pd.concat(
-    bill_data[['tube_assembly_id', c]].rename(columns={c: 'component'})
-    for c in bill_data.filter(regex='component_')
+    bill_data[['tube_assembly_id',
+               'component_id_{}'.format(i),
+               'component_id_{}_trimmed'.format(i),
+               'quantity_{}'.format(i)]]
+               .rename(columns={'component_id_{}'.format(i): 'component_orig',
+                                'component_id_{}_trimmed'.format(i): 'component',
+                                'quantity_{}'.format(i): 'quantity'})
+    for i in range(1, 9)
 )
-# bill_components.loc[:, 'component'] = bill_components['component'] \
-#     .apply(rare_component, args=(component_dist, ))
+grouped_bill_components = bill_components.groupby(
+    ('tube_assembly_id', 'component'), as_index=False).sum()
 
-bill_components_bin = pd.get_dummies(bill_components['component'])
-bill_comp_bin = pd.concat([bill_components, bill_components_bin], axis=1)
-bill_comp_bin = bill_comp_bin.groupby(bill_comp_bin.tube_assembly_id).sum()
+bill_components_bin = pd.get_dummies(grouped_bill_components['component'])
+bill_comp_bin = pd.concat([grouped_bill_components, bill_components_bin], axis=1)
+print('setting component counts')
+for ind in range(bill_comp_bin.shape[0]):
+
+    bill_comp_bin.loc[ind, bill_comp_bin.loc[ind, 'component']] = \
+        bill_comp_bin.loc[ind, 'quantity']
+
+bill_comp_bin = bill_comp_bin.groupby(bill_comp_bin.tube_assembly_id,
+                                      as_index=False).sum()
 bill_data = pd.merge(bill_data, bill_comp_bin,
-                     left_on='tube_assembly_id', right_index=True)
+                     on='tube_assembly_id',
+                     how='left')
+# clean up nans for tube assemblies that don't have components
+bill_data = bill_data.fillna(0)
 
-print('setting component values')
-for ind in range(bill_data.shape[0]):
+# component names
+comps = pd.read_csv('competition_data/components.csv')
+comps.loc[:, 'base_name'] = comps['name'].apply(comp_name_type)
 
-    comp1 = bill_data.loc[ind, 'component_id_1']
-    if pd.notnull(comp1):
-        bill_data.loc[ind, comp1] = \
-            bill_data.loc[ind, 'quantity_1']
-    else:
-        continue
+comps_base_dist = comps['base_name'].value_counts()
+comps.loc[:, 'base_name'] = comps['base_name'].apply(rare_name_type,
+                                                     args=(comps_base_dist, ))
 
-    comp2 = bill_data.loc[ind, 'component_id_2']
-    if pd.notnull(comp2):
-        bill_data.loc[ind, comp2] = \
-            bill_data.loc[ind, 'quantity_2']
-    else:
-        continue
+comps_base_bin = pd.get_dummies(comps['base_name'])
+comps_base = pd.concat([comps, comps_base_bin], axis=1)
+bill_comps_base = pd.merge(bill_components, comps_base, left_on='component_orig',
+                           right_on='component_id', how='left')
+grouped_bill_comps_base = bill_comps_base.groupby(bill_comps_base.tube_assembly_id).sum()
+grouped_bill_comps_base = grouped_bill_comps_base.drop(['RareNameType'], axis=1)
+bill_data = pd.merge(bill_data, grouped_bill_comps_base,
+                     left_on='tube_assembly_id',
+                     right_index='tube_assembly_id',
+                     how='left')
 
-    comp3 = bill_data.loc[ind, 'component_id_3']
-    if pd.notnull(comp3):
-        bill_data.loc[ind, comp3] = \
-            bill_data.loc[ind, 'quantity_3']
-    else:
-        continue
+component_name_dist = comps['name'].value_counts()
+comps.loc[:, 'name'] = comps['name'].apply(rare_component_name,
+                                           args=(component_name_dist, ))
 
-    comp4 = bill_data.loc[ind, 'component_id_4']
-    if pd.notnull(comp4):
-        bill_data.loc[ind, comp4] = \
-            bill_data.loc[ind, 'quantity_4']
-    else:
-        continue
+comp_names_bin = pd.get_dummies(comps['name'])
+comps_bin = pd.concat([comps, comp_names_bin], axis=1)
+bill_comps = pd.merge(bill_components, comps_bin, left_on='component_orig',
+                      right_on='component_id', how='left')
+grouped_bill_comps = bill_comps.groupby(bill_comps.tube_assembly_id).sum()
+bill_data = pd.merge(bill_data, grouped_bill_comps,
+                     left_on='tube_assembly_id',
+                     right_index='tube_assembly_id',
+                     how='left')
+bill_data = bill_data.fillna(0)
 
-    comp5 = bill_data.loc[ind, 'component_id_5']
-    if pd.notnull(comp5):
-        bill_data.loc[ind, comp5] = \
-            bill_data.loc[ind, 'quantity_5']
-    else:
-        continue
 
-    comp6 = bill_data.loc[ind, 'component_id_6']
-    if pd.notnull(comp6):
-        bill_data.loc[ind, comp6] = \
-            bill_data.loc[ind, 'quantity_6']
-    else:
-        continue
 
-    comp7 = bill_data.loc[ind, 'component_id_7']
-    if pd.notnull(comp7):
-        bill_data.loc[ind, comp7] = \
-            bill_data.loc[ind, 'quantity_7']
-    else:
-        continue
-
-    comp8 = bill_data.loc[ind, 'component_id_8']
-    if pd.notnull(comp8):
-        bill_data.loc[ind, comp8] = \
-            bill_data.loc[ind, 'quantity_8']
-    else:
-        continue
-
-# # removing old columns
+# removing old columns
 bill_data = bill_data.drop(['component_id_1', 'quantity_1',
                             'component_id_2', 'quantity_2',
                             'component_id_3', 'quantity_3',
@@ -228,9 +258,16 @@ bill_data = bill_data.drop(['component_id_1', 'quantity_1',
                             'component_id_5', 'quantity_5',
                             'component_id_6', 'quantity_6',
                             'component_id_7', 'quantity_7',
-                            'component_id_8', 'quantity_8'
-                            ], axis=1)
-# # # data = pd.merge(data, bill_data, on='tube_assembly_id')
+                            'component_id_8', 'quantity_8',
+                            'component_id_1_trimmed',
+                            'component_id_2_trimmed',
+                            'component_id_3_trimmed',
+                            'component_id_4_trimmed',
+                            'component_id_5_trimmed',
+                            'component_id_6_trimmed',
+                            'component_id_7_trimmed',
+                            'component_id_8_trimmed',
+                            'quantity_x', 'quantity_y'], axis=1)
 
 # spec data
 specs = pd.read_csv('competition_data/specs.csv')
@@ -238,26 +275,26 @@ specs.loc[:, 'total_specs'] = specs.filter(regex='spec\d').count(axis=1)
 specs.loc[:, 'has_specs'] = (specs['total_specs'] > 0).astype(int)
 reduced_specs = specs[['tube_assembly_id', 'total_specs', 'has_specs']]
 
-# # spec_data = pd.concat(
-# #     specs[['tube_assembly_id', c]].rename(columns={c: 'spec'})
-# #     for c in specs.filter(regex='spec\d')
-# # )
-# # spec_distribution = spec_data['spec'].value_counts()
-# # spec_data.loc[:, 'spec'] = spec_data['spec'].apply(rare_spec, args=(spec_distribution, ))
+# spec_data = pd.concat(
+#     specs[['tube_assembly_id', c]].rename(columns={c: 'spec'})
+#     for c in specs.filter(regex='spec\d')
+# )
+# spec_distribution = spec_data['spec'].value_counts()
+# spec_data.loc[:, 'spec'] = spec_data['spec'].apply(rare_spec, args=(spec_distribution, ))
 
-# # spec_data_bin = pd.get_dummies(spec_data['spec'])
-# # spec_bin = pd.concat([spec_data, spec_data_bin], axis=1)
-# # spec_bin = spec_bin.groupby(spec_bin.tube_assembly_id).sum()
-# # print('spec data bin shape', spec_data_bin.shape)
-# # print('spec bin shape', spec_bin.shape)
-# # print('spec shape is', specs.shape)
-# # specs = pd.merge(specs, spec_bin, left_on='tube_assembly_id',
-# #                  right_index=True)
-# # print('spec shape after merge', specs.shape)
+# spec_data_bin = pd.get_dummies(spec_data['spec'])
+# spec_bin = pd.concat([spec_data, spec_data_bin], axis=1)
+# spec_bin = spec_bin.groupby(spec_bin.tube_assembly_id).sum()
+# #print('spec data bin shape', spec_data_bin.shape)
+# #print('spec bin shape', spec_bin.shape)
+# #print('spec shape is', specs.shape)
+# specs = pd.merge(specs, spec_bin, left_on='tube_assembly_id',
+#                  right_index=True)
+# #print('spec shape after merge', specs.shape)
 
-# # # remove old spec columns
-# # specs = specs.drop(['spec{}'.format(i) for i in range(1, 11)], axis=1)
-# # reduced_specs = specs
+# # remove old spec columns
+# specs = specs.drop(['spec{}'.format(i) for i in range(1, 11)], axis=1)
+# reduced_specs = specs
 
 
 print('handling tube data')
@@ -326,25 +363,6 @@ tube_data = tube_data.drop(['end_form_id'], axis=1)
 
 tube_data = tube_data.drop(['material_id', 'end_a', 'end_x'], axis=1)
 
-# # # #data = pd.merge(data, tube_data, on='tube_assembly_id')
-
-# # # # # print('handling spec data')
-# # # # # spec_data = pd.concat(
-# # # # #     specs[['tube_assembly_id', c]].rename(columns={c: 'spec'})
-# # # # #     for c in specs.filter(regex='spec\d')
-# # # # # )
-# # # # # spec_distribution = spec_data['spec'].value_counts()
-# # # # # spec_data.loc[:, 'spec'] = spec_data['spec'].apply(rare_spec, args=(spec_distribution, ))
-
-# # # # # spec_data_bin = pd.get_dummies(spec_data['spec'])
-# # # # # spec_bin = pd.concat([spec_data, spec_data_bin], axis=1)
-# # # # # spec_bin = spec_bin.groupby(spec_bin.tube_assembly_id).sum()
-# # # # # specs = pd.merge(specs, spec_bin, left_on='tube_assembly_id', right_index=True)
-
-# # # # # # remove old spec columns
-# # # # # specs = specs.drop(['spec{}'.format(i) for i in range(1, 11)], axis=1)
-# # # # # data = pd.merge(data, specs, on='tube_assembly_id')
-
 
 print('making train/test data')
 if do_test:
@@ -367,63 +385,12 @@ test = pd.merge(test, reduced_specs, on='tube_assembly_id', how='left')
 test.loc[:, 'bracket_pricing'] = test['bracket_pricing'] \
     .map(bracket_pricing_map).astype(int)
 
-
-# # # # def rare_supplier(x):
-# # # #     try:
-# # # #         if supplier_dist[x] < 5:
-# # # #             return 'RareSupplier'
-# # # #     except KeyError:
-# # # #         return np.nan
-# # # #         #return 'RareSupplier'
-# # # #     else:
-# # # #         return x
-
-# # # # material_dist = train['material_id'].value_counts()
-# # # # def rare_material(x):
-# # # #     # if x == '9999' or x == 'None':
-# # # #     #     return np.nan
-# # # #     try:
-# # # #         if material_dist[x] < 10:
-# # # #             return 'RareMaterial'
-# # # #     except ValueError:
-# # # #         return x
-# # # #     except KeyError:
-# # # #         return np.nan
-# # # #         #return 'RareMaterial'
-# # # #     else:
-# # # #         return x
-
-# # # # end_assembly_dist = pd.concat([data['end_a'], data['end_x']], axis=0).value_counts()
-# # # # def rare_end_assembly(x):
-# # # #     # if x == '9999' or x == 'None':
-# # # #     #     return np.nan
-# # # #     try:
-# # # #         if end_assembly_dist[x] < 10:
-# # # #             return 'RareEnd'
-# # # #     except KeyError:
-# # # #         return np.nan
-# # # #         #return 'RareEnd'
-# # # #     else:
-# # # #         return x
-
 supplier_distribution = train['supplier'].value_counts()
 train.loc[:, 'supplier'] = train['supplier'] \
     .apply(rare_supplier, args=(supplier_distribution, ))
 test.loc[:, 'supplier'] = test['supplier'] \
     .apply(rare_supplier, args=(supplier_distribution, ))
 print('trainsformed supplier')
-
-# # train.loc[:, 'material_id'] = train['material_id'].apply(lambda x: rare_material(x))
-# # test.loc[:, 'material_id'] = test['material_id'].apply(lambda x: rare_material(x))
-# # print('transformed material id')
-
-# # train.loc[:, 'end_a'] = train['end_a'].apply(lambda x: rare_end_assembly(x))
-# # test.loc[:, 'end_a'] = test['end_x'].apply(lambda x: rare_end_assembly(x))
-# # print('transformed end a')
-
-# # train.loc[:, 'end_x'] = train['end_x'].apply(lambda x: rare_end_assembly(x))
-# # test.loc[:, 'end_x'] = test['end_x'].apply(lambda x: rare_end_assembly(x))
-# # print('transformed end x')
 
 print('setting date columns')
 train.loc[:, 'year'] = train.quote_date.dt.year
@@ -462,67 +429,8 @@ test.loc[:, 'inv_annual_usage'] = test['annual_usage'].apply(lambda x: make_inv(
 #test.loc[:, 'has_bends'] = (test['num_bends'] > 0).astype(int)
 test.loc[:, 'has_boss'] = (test['num_boss'] > 0).astype(int)
 
-# # # # suppliers
-# # train_suppliers = pd.DataFrame({'supplier': train['supplier']})
-# # train_suppliers.loc[:, 'from'] = 1
-# # test_suppliers = pd.DataFrame({'supplier': test['supplier']})
-# # test_suppliers.loc[:, 'from'] = 0
 
-# # supplier_col_values = pd.concat([train_suppliers, test_suppliers])
-# # #supplier_col_values = train_suppliers
-# # supplier_columns = pd.get_dummies(supplier_col_values)
-# # sup_col_names = {col_name: re.sub(r'supplier_', '', col_name)
-# #                  for col_name in supplier_columns.columns}
-# # supplier_columns.rename(columns=sup_col_names, inplace=True)
-
-# # suppliers_for_train = supplier_columns[supplier_columns['from'] == 1]
-# # suppliers_for_train = suppliers_for_train.drop(['from'], axis=1)
-
-# # suppliers_for_test = supplier_columns[supplier_columns['from'] == 0]
-# # suppliers_for_test = suppliers_for_test.drop(['from'], axis=1)
-# # train = pd.concat([train, suppliers_for_train], axis=1)
-# # test = pd.concat([test, suppliers_for_test], axis=1)
-
-# # # materials
-# # # train_materials = pd.DataFrame({'material_id': train['material_id']})
-# # # train_materials.loc[:, 'from'] = 1
-# # # test_materials = pd.DataFrame({'material_id': test['material_id']})
-# # # test_materials.loc[:, 'from'] = 0
-
-# # # materials_col_values = pd.concat([train_materials, test_materials])
-# # # #materials_col_values = train_materials
-# # # materials_columns = pd.get_dummies(materials_col_values)
-# # # mat_col_names = {col_name: re.sub(r'material_id_', '', col_name)
-# # #                  for col_name in materials_columns.columns}
-# # # materials_columns.rename(columns=mat_col_names, inplace=True)
-
-# # # materials_for_train = materials_columns[materials_columns['from'] == 1]
-# # # materials_for_train = materials_for_train.drop(['from'], axis=1)
-
-# # # materials_for_test = materials_columns[materials_columns['from'] == 0]
-# # # materials_for_test = materials_for_test.drop(['from'], axis=1)
-# # # train = pd.concat([train, materials_for_train], axis=1)
-# # # test = pd.concat([test, materials_for_test], axis=1)
-
-# # # end columns
-# # train_ends = train[['end_a', 'end_x']]
-# # train_ends.loc[:, 'from'] = 1
-# # test_ends = test[['end_a', 'end_x']]
-# # test_ends.loc[:, 'from'] = 0
-
-# # ends_col_values = pd.concat([train_ends, test_ends])
-# # #ends_col_values = train_ends
-# # ends_columns = pd.get_dummies(ends_col_values)
-
-# # ends_cols_for_train = ends_columns[ends_columns['from'] == 1]
-# # ends_cols_for_train = ends_cols_for_train.drop(['from'], axis=1)
-
-# # ends_cols_for_test = ends_columns[ends_columns['from'] == 0]
-# # ends_cols_for_test = ends_cols_for_test.drop(['from'], axis=1)
-# # train = pd.concat([train, ends_cols_for_train], axis=1)
-# # test = pd.concat([test, ends_cols_for_test], axis=1)
-
-# # labels
+# labels
 labels = np.log1p(train.cost.values)
 train = train.drop(['quote_date',
                     'cost',
@@ -558,29 +466,30 @@ test = np.array(test)
 train = train.astype(float)
 test = test.astype(float)
 
-print('training RF model')
-model = 'RF'
-rfr = ensemble.RandomForestRegressor(n_estimators=50,
-                                     max_depth=15,
-                                     min_weight_fraction_leaf=0.0,
-                                     random_state=42,
-                                     n_jobs=-1)
-rfr.fit(train, labels)
-print('predicting with RF model')
-predictions = rfr.predict(test)
-predictions = np.expm1(predictions)
-
-# print('traing gbr model')
-# model = 'gbr'
-# gbr = ensemble.GradientBoostingRegressor(n_estimators=300,
-#                                          learning_rate=0.1,
-#                                          max_depth=25,
-#                                          random_state=42,
-#                                          loss='lad')
-# gbr.fit(train, labels)
-# print('predicting with gbr model')
-# predictions = gbr.predict(test)
+# print('training RF model')
+# model = 'RF'
+# rfr = ensemble.RandomForestRegressor(n_estimators=50,
+#                                      max_depth=15,
+#                                      min_weight_fraction_leaf=0.0,
+#                                      random_state=42,
+#                                      n_jobs=-1)
+# rfr.fit(train, labels)
+# print('predicting with RF model')
+# predictions = rfr.predict(test)
 # predictions = np.expm1(predictions)
+
+print('traing gbr model')
+model = 'gbr'
+gbr = ensemble.GradientBoostingRegressor(n_estimators=1000,
+                                         learning_rate=0.1,
+                                         subsample=0.8,
+                                         max_depth=15,
+                                         random_state=42,
+                                         loss='lad')
+gbr.fit(train, labels)
+print('predicting with gbr model')
+predictions = gbr.predict(test)
+predictions = np.expm1(predictions)
 
 
 if do_test:
