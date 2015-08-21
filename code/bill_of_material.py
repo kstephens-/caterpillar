@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 
 import utils
+import components as comps
 
 
 bill = pd.read_csv('../competition_data/bill_of_materials.csv')
@@ -42,5 +43,7 @@ def bill_of_material(df):
 
     components = bill_components()
     df = component_quantity(df, components)
+    df = comps.base_name(df, components)
+
 
     return df

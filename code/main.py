@@ -56,7 +56,7 @@ def xgboost_model(train, labels, test):
     xgtrain = xgb.DMatrix(train, label=labels)
     xgtest = xgb.DMatrix(test)
 
-    # 0.271215 at num_rounds == 1000
+    # 0.267133 at num_rounds == 1000
     num_rounds = 120
     m = xgb.train(list(params.items()), xgtrain, num_rounds)
     return m, np.expm1(m.predict(xgtest))
