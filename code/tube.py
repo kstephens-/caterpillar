@@ -28,7 +28,7 @@ def bend_radius(df):
 
     #df = df[df['bend_radius'] < 9000]
     df.loc[:, 'bend_radius'] = df['bend_radius'].apply(
-        lambda x: 31.75 if x == 9999 else x
+       lambda x: 31.75 if x == 9999 else x
     )
     return df
 
@@ -77,6 +77,8 @@ def ends(df):
 
 def tube(df):
 
+    df = df[df['length'] < 9999]
+
     material_distribution = df['material_id'].value_counts()
     df = material(df, material_distribution)
 
@@ -86,6 +88,8 @@ def tube(df):
     df = volume(df)
     df = end_form.end_forms(df)
     df = ends(df)
+
+    #df.loc[:, 'total_bend_radius'] = df['num_bends'] * df['bend_radius']
 
     # possibly drop these
     df = df.drop(['num_bracket'], axis=1)
