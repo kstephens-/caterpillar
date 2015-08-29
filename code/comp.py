@@ -7,6 +7,9 @@ import boss
 import elbow
 import float_
 import hfl
+import nut
+import other
+import straight
 
 
 comp_sleeve = pd.read_csv('../competition_data/comp_sleeve.csv')
@@ -117,5 +120,8 @@ def component(df, bill_components):
     df = elbow.elbow(df, bill_components, comp_elbow)
     df = float_.float_(df, bill_components, comp_float)
     #df = hfl.hfl(df, bill_components, comp_hfl)
+    df = nut.nut(df, bill_components, comp_nut)
+    #df = other.other(df, bill_components, comp_other)
+    df = straight.straight(df, bill_components, comp_straight)
 
     return df

@@ -73,11 +73,12 @@ def bolt_pattern_long(boss):
     train = train.drop(['bolt_pattern_long'], axis=1)
     test = test.drop(['bolt_pattern_long'], axis=1)
 
-    ols = linear_model.Ridge(alpha=0.4, normalize=True)
+    ols = linear_model.LinearRegression(normalize=True)
+    #ols = linear_model.Ridge(alpha=0.4, normalize=True)
     # ols = linear_model.Lasso(alpha=1.0, normalize=True,
     #                          random_state=42, selection='random')
     ols.fit(train, labels)
-    print('ols r2 in bolt pattern long', ols.score(train, labels))
+    #print('ols r2 in bolt pattern long', ols.score(train, labels))
     predictions = ols.predict(test)
 
     boss.loc[idx, 'bolt_pattern_long'] = predictions

@@ -13,8 +13,8 @@ from split import train_test
 from constants import yes_no_null
 
 
-test = True
-version = 5.4
+test = False
+version = 5.6
 
 
 def bracket_pricing(df):
@@ -55,19 +55,21 @@ def xgboost_model(train, labels, test):
     #params['gamma'] = 10
     params['min_child_weight'] = 15
     params['subsample'] = 0.7
+    params['colsample_bytree'] = 0.8
     #params['max_delta_step'] = 0
     params['silent'] = 1
     params['max_depth'] = 15
-    params['alpha'] = 2
-    params['lambda'] = 10
+    params['alpha'] = 1
+    params['lambda'] = 15
     params['eval_metric'] = 'rmse'
 
     xgtrain = xgb.DMatrix(train, label=labels)
     xgtest = xgb.DMatrix(test)
 
-    # 0.260074 at num_rounds == 2500
-    # 0.261979 at num_rounds == 1200 cv
-    num_rounds = 1200
+    # 0.252876 at num_rounds == 1200
+    # 0.259305 at num_rounds == 1200 cv
+    # 0.262275 at num_rounds == 120 cv
+    num_rounds = 120
     m = xgb.train(list(params.items()), xgtrain, num_rounds)
     return m, np.expm1(m.predict(xgtest))
 
