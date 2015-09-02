@@ -79,6 +79,7 @@ def elbow(df, bill_components, elbow):
                         'elbow_angle', 'overall_length',
                         'plug_diameter', 'mj_class_code',
                         'extension_length', 'mj_plug_class_code'], axis=1)
+    elbow = utils.rename_comp_columns(elbow, 'elbow')
 
     elbow_comps = elbow_components(bill_components, elbow)
     df = pd.merge(df, elbow_comps, left_on='tube_assembly_id',

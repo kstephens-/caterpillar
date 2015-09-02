@@ -41,17 +41,17 @@ def material(hfl):
 
 def hfl(df, bill_components, hfl):
 
-    # hfl.loc[:, 'plating_hfl'] = hfl['plating'] \
-    #     .map(yes_no_null)
-    # hfl.loc[:, 'orientation_hfl'] = hfl['orientation'] \
-    #     .map(yes_no_null)
+    hfl.loc[:, 'plating_hfl'] = hfl['plating'] \
+        .map(yes_no_null)
+    hfl.loc[:, 'orientation_hfl'] = hfl['orientation'] \
+        .map(yes_no_null)
 
     hfl = corresponding_shell(hfl)
-    #hfl = coupling_class(hfl)
-    #hfl = material(hfl)
+    hfl = coupling_class(hfl)
+    hfl = material(hfl)
 
-    hfl = hfl.drop(['plating', 'orientation', 'material',
-                    'coupling_class', 'hose_diameter'], axis=1)
+    hfl = hfl.drop(['plating', 'orientation'], axis=1)
+    hfl = utils.rename_comp_columns(hfl, 'hfl')
 
     hfl_comps = hfl_components(bill_components, hfl)
     df = pd.merge(df, hfl_comps, left_on='tube_assembly_id',

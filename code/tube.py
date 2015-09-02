@@ -1,5 +1,6 @@
 import pandas as pd
 import math
+from sklearn import linear_model
 
 import utils
 import end_form
@@ -31,6 +32,35 @@ def bend_radius(df):
        lambda x: 31.75 if x == 9999 else x
     )
     return df
+
+
+# def bend_radius(df):
+
+#     d = df[['bend_radius', 'diameter', 'wall', 'num_bends']]
+#     d = d[d['bend_radius'] != 0]
+#     msk = d['bend_radius'] != 9999
+#     train = d[msk]
+#     test = d[~msk]
+
+#     if test.empty:
+#         return df
+
+#     labels = train.bend_radius.values
+#     idx = test.index
+
+#     train.drop(['bend_radius'], axis=1, inplace=True)
+#     test.drop(['bend_radius'], axis=1, inplace=True)
+
+#     ols = linear_model.Ridge(alpha=0.2, normalize=False)
+#     ols.fit(train, labels)
+
+#     print()
+#     print('ols r2', ols.score(train, labels))
+#     print()
+#     predictions = ols.predict(test)
+
+#     df.loc[idx, 'bend_radius'] = predictions
+#     return df
 
 
 def end_bool(df):

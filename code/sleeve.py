@@ -1,5 +1,6 @@
 import pandas as pd
 
+import utils
 from constants import yes_no_null
 
 
@@ -38,6 +39,7 @@ def sleeve(df, bill_components, sleeve):
 
     sleeve = sleeve.drop(['orientation', 'plating', 'unique_feature',
                           'intended_nut_thread', 'weight'], axis=1)
+    sleeve = utils.rename_comp_columns(sleeve, 'sleeve')
 
     sleeve_comps = sleeve_components(bill_components, sleeve)
     df = pd.merge(df, sleeve_comps, left_on='tube_assembly_id',

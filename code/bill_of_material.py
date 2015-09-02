@@ -16,7 +16,7 @@ def bill_components():
               'component_id_{}'.format(i),
               'quantity_{}'.format(i)]]
             .rename(columns={'component_id_{}'.format(i): 'component',
-                             'quantity_{}'.format(i): 'quantity'})
+                             'quantity_{}'.format(i): 'quantity_component'})
         for i in range(1, 9)
     )
     component_distribution = components['component'].value_counts()
@@ -31,7 +31,7 @@ def bill_components():
 def component_quantity(df, components):
 
     component_table = pd.pivot_table(
-        components, values='quantity',
+        components, values='quantity_component',
         index='tube_assembly_id', columns='filtered_component',
         aggfunc=np.sum, fill_value=0
     )
@@ -48,5 +48,6 @@ def bill_of_material(df):
     #df = comp.component_type(df, bill_comps)
     #df = comp.connection_type(df, bill_comps)
     df = comp.component(df, bill_comps)
+    #df = df.drop(['RareComponent', 'quantity_component'], axis=1)
 
     return df

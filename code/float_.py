@@ -1,5 +1,6 @@
 import pandas as pd
 
+import utils
 from constants import yes_no_null
 
 
@@ -22,6 +23,7 @@ def float_(df, bill_components, float_):
     float_ = float_[float_['weight'] <= 2.5]
 
     float_ = float_.drop(['component_type_id', 'orientation'], axis=1)
+    float_ = utils.rename_comp_columns(float_, 'float')
 
     float_comps = float_components(bill_components, float_)
     df = pd.merge(df, float_comps, left_on='tube_assembly_id',

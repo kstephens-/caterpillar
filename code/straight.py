@@ -1,6 +1,7 @@
 import pandas as pd
 from sklearn import linear_model
 
+import utils
 from constants import yes_no_null
 
 
@@ -147,6 +148,7 @@ def straight(df, bill_components, straight):
     straight = straight.drop(['groove', 'unique_feature',
                              'orientation', 'component_type_id',
                              'mj_class_code'], axis=1)
+    straight = utils.rename_comp_columns(straight, 'straight')
 
     straight_comps = straight_components(bill_components, straight)
     df = pd.merge(df, straight_comps, left_on='tube_assembly_id',

@@ -10,6 +10,8 @@ import hfl
 import nut
 import other
 import straight
+import tee
+import threaded
 
 
 comp_sleeve = pd.read_csv('../competition_data/comp_sleeve.csv')
@@ -104,9 +106,52 @@ def connection_type(df, bill_components):
     grouped_connections = merged_connections \
         .groupby(merged_connections.tube_assembly_id).sum()
 
+
     df = pd.merge(df, grouped_connections,
                   left_on='tube_assembly_id',
                   right_index=True, how='left')
+
+    return df
+
+
+def end_forms(df, bill_components):
+
+    comp_files = []
+    adaptor = pd.concat(
+        comp_adaptor[['component_id', 'end_form_id_{}'.format(i)]]
+        .rename(columns={'end_form_id_{}'.format(i): 'end_form_id'})
+        for i in range(1, 3)
+    )
+    comp_files.append(adaptor)
+
+    threaded = pd.concat(
+        comp_threaded[['component_id', 'end_form_id_{}'.format(i)]]
+        .rename(columns={'end_form_id_{}'.format(i): 'end_form_id'})
+        for i in range(1, 3)
+    )
+    comp_files.append(threaded)
+    end_forms = pd.concat(comp_files)
+
+    end_form_distribution = end_forms['end_form_id'].value_counts()
+    end_forms.loc[:, 'end_form_id'] = end_forms['end_form_id'] \
+        .apply(utils.rare_category, args=(end_form_distribution, ),
+               cutoff=100, value='RareEndForm')
+
+    end_forms_bin = pd.get_dummies(end_forms['end_form_id'])
+    end_forms_dummy = pd.concat([end_forms, end_forms_bin], axis=1)
+
+    merged_end_forms = pd.merge(bill_components,
+                                end_forms_dummy,
+                                left_on='component',
+                                right_on='component_id',
+                                how='left')
+    grouped_end_forms = merged_end_forms \
+        .groupby(merged_end_forms.tube_assembly_id).sum()
+
+    df = pd.merge(df, grouped_end_forms,
+                  left_on='tube_assembly_id',
+                  right_index=True, how='left')
+
     return df
 
 
@@ -114,14 +159,18 @@ def component(df, bill_components):
 
     #df = component_type(df, bill_components)
     df = connection_type(df, bill_components)
+    df = end_forms(df, bill_components)
+
     df = sleeve.sleeve(df, bill_components, comp_sleeve)
     df = adaptor.adaptor(df, bill_components, comp_adaptor)
     df = boss.boss(df, bill_components, comp_boss)
     df = elbow.elbow(df, bill_components, comp_elbow)
     df = float_.float_(df, bill_components, comp_float)
-    #df = hfl.hfl(df, bill_components, comp_hfl)
+    df = hfl.hfl(df, bill_components, comp_hfl)
     df = nut.nut(df, bill_components, comp_nut)
     #df = other.other(df, bill_components, comp_other)
     df = straight.straight(df, bill_components, comp_straight)
+    df = tee.tee(df, bill_components, comp_tee)
+    df = threaded.threaded(df, bill_components, comp_threaded)
 
     return df

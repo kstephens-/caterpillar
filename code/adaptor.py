@@ -6,30 +6,30 @@ import utils
 from constants import yes_no_null
 
 
-def end_forms(adaptor):
+# def end_forms(adaptor):
 
-    adaptor_end_forms = pd.concat(
-        adaptor[['component_id', 'end_form_id_{}'.format(i)]]
-        .rename(columns={'end_form_id_{}'.format(i): 'end_form_id'})
-        for i in range(1, 3)
-    )
+#     adaptor_end_forms = pd.concat(
+#         adaptor[['component_id', 'end_form_id_{}'.format(i)]]
+#         .rename(columns={'end_form_id_{}'.format(i): 'end_form_id'})
+#         for i in range(1, 3)
+#     )
 
-    end_form_distribution = adaptor_end_forms['end_form_id'].value_counts()
-    adaptor_end_forms.loc[:, 'end_form_id'] = adaptor_end_forms['end_form_id'] \
-        .apply(utils.rare_category, args=(end_form_distribution, ),
-               cutoff=20, value='RareEndForm')
+#     end_form_distribution = adaptor_end_forms['end_form_id'].value_counts()
+#     adaptor_end_forms.loc[:, 'end_form_id'] = adaptor_end_forms['end_form_id'] \
+#         .apply(utils.rare_category, args=(end_form_distribution, ),
+#                cutoff=20, value='RareEndForm')
 
-    end_form_bin = pd.get_dummies(adaptor_end_forms['end_form_id'])
-    end_form_dummy = pd.concat([adaptor_end_forms, end_form_bin], axis=1)
-    #end_form_dummy = end_form_dummy.drop(['end_form_id_1', 'end_form_id_2'], axis=1)
+#     end_form_bin = pd.get_dummies(adaptor_end_forms['end_form_id'])
+#     end_form_dummy = pd.concat([adaptor_end_forms, end_form_bin], axis=1)
+#     #end_form_dummy = end_form_dummy.drop(['end_form_id_1', 'end_form_id_2'], axis=1)
 
-    grouped_end_form = end_form_dummy \
-        .groupby(end_form_dummy.component_id).sum()
+#     grouped_end_form = end_form_dummy \
+#         .groupby(end_form_dummy.component_id).sum()
 
-    adaptor = pd.merge(adaptor, grouped_end_form,
-                       left_on='component_id', right_index=True)
-    adaptor = adaptor.drop(['RareEndForm'], axis=1)
-    return adaptor
+#     adaptor = pd.merge(adaptor, grouped_end_form,
+#                        left_on='component_id', right_index=True)
+#     adaptor = adaptor.drop(['RareEndForm'], axis=1)
+#     return adaptor
 
 
 def adaptor_components(bill_components, adaptor):
@@ -120,10 +120,10 @@ def adaptor_impute(adaptor):
         .apply(lambda x: 8.8 if pd.isnull(x) else x)
 
     # adaptor.loc[:, 'thread_size_2'] = adaptor['thread_size_2'] \
-    #    .apply(lambda x: 0.78 if pd.isnull(x) else x)
+    #    .apply(lambda x: 0.6550 if (pd.isnull(x) or x == 9999) else x)
 
     # adaptor.loc[:, 'thread_pitch_2'] = adaptor['thread_pitch_2'] \
-    #     .apply(lambda x: 19.3 if pd.isnull(x) else x)
+    #     .apply(lambda x: 17.75 if (pd.isnull(x) or x == 9999) else x)
 
     # adaptor.loc[:, 'nominal_size_2'] = adaptor['nominal_size_2'] \
     #     .apply(lambda x: 9.52 if pd.isnull(x) else x)
@@ -146,7 +146,7 @@ def adaptor(df, bill_components, adaptor):
         adaptor['orientation'].map(yes_no_null)
 
     adaptor = adaptor_impute(adaptor)
-    adaptor = end_forms(adaptor)
+    #adaptor = end_forms(adaptor)
 
     adaptor = adaptor.drop(['component_type_id',
                             'connection_type_id_1',
@@ -154,6 +154,7 @@ def adaptor(df, bill_components, adaptor):
                             'unique_feature', 'orientation',
                             'end_form_id_1', 'end_form_id_2',
                             'adaptor_angle'], axis=1)
+    adaptor = utils.rename_comp_columns(adaptor, 'adaptor')
 
     adaptor_comps = adaptor_components(bill_components, adaptor)
     df = pd.merge(df, adaptor_comps, left_on='tube_assembly_id',

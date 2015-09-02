@@ -85,9 +85,60 @@ def bolt_pattern_long(boss):
     return boss
 
 
+def bolt_pattern_wide(boss):
+
+    d = boss[['height_over_tube', 'weight', 'bolt_pattern_long', 'bolt_pattern_wide']]
+    msk = pd.notnull(d['bolt_pattern_wide'])
+    train = d[msk]
+    test = d[~msk]
+    if test.empty:
+        return boss
+
+    labels = train.bolt_pattern_wide.values
+    idx = test.index
+
+    train = train.drop(['bolt_pattern_wide'], axis=1)
+    test = test.drop(['bolt_pattern_wide'], axis=1)
+
+    ols = linear_model.Ridge(alpha=0.2, normalize=True)
+    ols.fit(train, labels)
+
+    #print('ols r2', ols.score(train, labels))
+    predictions = ols.predict(test)
+
+    boss.loc[idx, 'bolt_pattern_wide'] = predictions
+    return boss
+
+
+def base_diameter(boss):
+
+    d = boss[['base_diameter', 'height_over_tube', 'weight']]
+    msk = pd.notnull(d['base_diameter'])
+    train = d[msk]
+    test = d[~msk]
+    if test.empty:
+        return boss
+
+    labels = train.base_diameter.values
+    idx = test.index
+
+    train = train.drop(['base_diameter'], axis=1)
+    test = test.drop(['base_diameter'], axis=1)
+
+    ols = linear_model.Ridge(alpha=0.2, normalize=True)
+    ols.fit(train, labels)
+
+    print('ols r2', ols.score(train, labels))
+    predictions = ols.predict(test)
+
+    boss.loc[idx, 'base_diameter'] = predictions
+    return boss
+
+
+
 def shoulder_diameter(boss):
 
-    d = boss[['height_over_tube', 'weight', 'shoulder_diameter']]
+    d = boss[['height_over_tube', 'weight', 'shoulder_diameter', 'base_diameter']]
     msk = pd.notnull(d['shoulder_diameter'])
     train = d[msk]
     test = d[~msk]
@@ -98,10 +149,10 @@ def shoulder_diameter(boss):
     train = train.drop(['shoulder_diameter'], axis=1)
     test = test.drop(['shoulder_diameter'], axis=1)
 
-    ols = linear_model.Lasso(alpha=1.0, normalize=False,
-                             random_state=42, selection='random')
+    ols = linear_model.LinearRegression(normalize=True)
     ols.fit(train, labels)
-    print('lasso r2', ols.score(train, labels))
+
+    print('ols r2', ols.score(train, labels))
     predictions = ols.predict(test)
 
     boss.loc[idx, 'shoulder_diameter'] = predictions
@@ -126,6 +177,8 @@ def boss_impute(boss):
         .apply(lambda x: 0.082 if pd.isnull(x) else x)
 
     boss = bolt_pattern_long(boss)
+    boss = bolt_pattern_wide(boss)
+    #boss = base_diameter(boss)
     #boss = shoulder_diameter(boss)
 
     return boss
@@ -137,8 +190,8 @@ def boss(df, bill_components, boss):
     #     boss['groove'].map(yes_no_null)
     # boss.loc[:, 'unique_feature_boss'] = \
     #     boss['unique_feature'].map(yes_no_null)
-    boss.loc[:, 'orientation_boss'] = \
-        boss['orientation'].map(yes_no_null)
+    # boss.loc[:, 'orientation_boss'] = \
+    #     boss['orientation'].map(yes_no_null)
 
     boss = boss_impute(boss)
     #boss = boss_type(boss)
@@ -149,9 +202,10 @@ def boss(df, bill_components, boss):
 
     boss = boss.drop(['groove', 'unique_feature',
                       'orientation', 'component_type_id',
-                      'connection_type_id',  'base_diameter',
-                      'outside_shape', 'type','shoulder_diameter',
-                      'base_type', 'bolt_pattern_wide'], axis=1)
+                      'connection_type_id', 'base_diameter',
+                      'base_type', 'type', 'shoulder_diameter',
+                      'outside_shape'], axis=1)
+    boss = utils.rename_comp_columns(boss, 'boss')
 
     boss_comps = boss_components(bill_components, boss)
     df = pd.merge(df, boss_comps, left_on='tube_assembly_id',

@@ -1,6 +1,7 @@
 import pandas as pd
 from sklearn import linear_model
 
+import utils
 from constants import yes_no_null
 
 
@@ -152,6 +153,7 @@ def nut(df, bill_components, nut):
 
     nut = nut.drop(['component_type_id', 'orientation',
                     'blind_hole', 'seat_angle'], axis=1)
+    nut = utils.rename_comp_columns(nut, 'nut')
 
     nut_comps = nut_components(bill_components, nut)
     df = pd.merge(df, nut_comps, left_on='tube_assembly_id',

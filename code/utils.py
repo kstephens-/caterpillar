@@ -38,3 +38,11 @@ def make_inv(x):
     if x == 0:
         return 0
     return 1 / math.log(1 + x)
+
+
+def rename_comp_columns(df, suffix, skip='component_id'):
+
+    df.columns = ['_'.join([c, suffix])
+                  if c != skip and not c.endswith(suffix) else c
+                  for c in df.columns]
+    return df
